@@ -40,7 +40,8 @@ L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_toke
 		zoomOffset: -1
 	}).addTo(map);
 
-map.locate({setView: true, maxZoom: 19});
+//map.locate({setView: true, maxZoom: 19});
+map.setView([40.22240964998612, -74.96191965322255],19)
 
 
 var x = document.getElementById("demo");
@@ -80,8 +81,8 @@ finder.possibleLocations = [];
 finder.maxRange = 15;//meters
 finder.minTransmissionLoss = 1;
 finder.maxTransmissionLoss = 20;
-finder.referenceLatLng = [0,0]
-getLocation();
+finder.referenceLatLng =
+finder.getCurrentPosition = [40.22240964998612, -74.96191965322255]
 
 finder.drawSensors = function(){
   for(let i=0;i<finder.sensors.length;i++){
@@ -279,7 +280,7 @@ finder.runDemo = function(){
   console.log(finder)
 }
 
-setTimeout(finder.runDemo,5000);
+setTimeout(finder.runDemo,2000);
 
 </script>
 
