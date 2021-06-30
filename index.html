@@ -57,10 +57,12 @@ function showPosition(position) {
   var lat = position.coords.latitude;
   var lng = position.coords.longitude;
   finder.getCurrentPosition = [lat,lng]
+  finder.referenceLatLng = [lat,lng]
   if(finder.me){
     map.removeLayer(finder.me)
   }
-  finder.me = L.circle(finder.getCurrentPosition, {color:"blue",radius: 2}).addTo(map);
+  finder.me = L.circle(finder.getCurrentPosition, {color:"black",radius: 1}).addTo(map);
+  return [lat,lng]
 }
 
 
@@ -78,10 +80,10 @@ finder.possibleLocations = [];
 finder.maxRange = 15;//meters
 finder.minTransmissionLoss = 1;
 finder.maxTransmissionLoss = 20;
-finder.referenceLatLng = [30.3004883,-81.7239872]
+finder.referenceLatLng = [0,0]
+getLocation();
 
 finder.drawSensors = function(){
-
   for(let i=0;i<finder.sensors.length;i++){
     let pt = finder.sensors[i];
     let up = geomath.rhumbDestination(finder.referenceLatLng, pt.y/1852, 0)
@@ -267,15 +269,18 @@ function intersection(x0, y0, r0, x1, y1, r1) {
     }
 
 
+finder.runDemo = function(){
+  finder.addSensor(1,0,0,20)
+  finder.addSensor(1,5,10,90)
+  finder.addSensor(1,-5,5,40)
+  finder.addAouThreeSensor(10000)
+  finder.drawPoints()
+  finder.drawSensors()
+  console.log(finder)
+}
 
+setTimeout(finder.runDemo,5000);
 
-    finder.addSensor(1,0,0,20)
-finder.addSensor(1,5,10,90)
-finder.addSensor(1,-5,5,40)
-finder.addAouThreeSensor(10000)
-finder.drawPoints()
-finder.drawSensors()
-console.log(finder)
 </script>
 
 
