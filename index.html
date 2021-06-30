@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="geomath.js"></script>
+  <script src="leafletHeat.js"></script>
+
+  <style>
+    body {
+    padding: 0;
+    margin: 0;
+    }
+    html, body, #map {
+        height: 100%;
+        width: 100vw;
+    }
+  </style>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  </head>
+<body>
+<div id="map"></div>
+
+
+<button onclick="getLocation()">Try It</button>
+
+<p id="demo"></p>
+</body>
+
+<script>
+
+
+var map = L.map('map').fitWorld();
+
+L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1Ijoic2Vhbjc2MDEiLCJhIjoiY2txaXR1ZzdsMDJpbzJ2cDM4eWN4OGFiayJ9.H4Z0G9_sK8mkzPa6N6f5Ag', {
+		maxZoom: 22,
+		attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
+			'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+		id: 'mapbox/streets-v11',
+		tileSize: 512,
+		zoomOffset: -1
+	}).addTo(map);
+
+map.locate({setView: true, maxZoom: 19});
+
+
+var x = document.getElementById("demo");
+
+function getLocation() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(showPosition);
+  } else { 
+    x.innerHTML = "Geolocation is not supported by this browser.";
+  }
+}
+
+function showPosition(position) {
+  var lat = position.coords.latitude;
+  var lng = position.coords.longitude;
+  finder.getCurrentPosition = [lat,lng]
+  if(finder.me){
+    map.removeLayer(finder.me)
+  }
+  finder.me = L.circle(finder.getCurrentPosition, {color:"blue",radius: 2}).addTo(map);
+}
+
+
+
+function updatePostion(){
+  navigator.geolocation.getCurrentPosition(showPosition);
+
+}
+
+var finder = new Object;
+finder.getCurrentPosition = [0,0]
+finder.me = null
+finder.sensors = [];
+finder.possibleLocations = [];
+finder.maxRange = 15;//meters
+finder.minTransmissionLoss = 1;
+finder.maxTransmissionLoss = 20;
+finder.referenceLatLng = [30.3004883,-81.7239872]
+
+finder.drawSensors = function(){
+
+  for(let i=0;i<finder.sensors.length;i++){
+    let pt = finder.sensors[i];
+    let up = geomath.rhumbDestination(finder.referenceLatLng, pt.y/1852, 0)
+    let right = geomath.rhumbDestination(up, pt.x/1852, 90)
+    L.circle(right, {radius: finder.maxRange}).addTo(map);
+  }
+}
+finder.drawPoints = function(){
+  let pts = []
+  for(let i=0;i<finder.possibleLocations.length;i++){
+    let pt = finder.possibleLocations[i];
+    console.log(pt)
+    let up = geomath.rhumbDestination(finder.referenceLatLng, pt.y/1852, 0)
+    let right = geomath.rhumbDestination(up, pt.x/1852, 90)
+    console.log(right)
+    pts.push([right[0],right[1],1])
+    //L.circle(right, {radius: 1}).addTo(map);
+  }
+  var heat = L.heatLayer(pts, {radius: 5}).addTo(map);
+}
+
+finder.addSensor = function(id,x,y,strength){
+  let sensor = {id:id,x:x,y:y,strength:strength}
+  finder.sensors.push(sensor)
+}
+
+
+
+finder.interpolate = function(){
+  if(finder.sensors.length == 0){
+    return;
+  }
+  else if(finder.sensors.length == 1){
+    finder.addAouOneSensor(500);
+  }
+  else if(finder.sensors.length == 2){
+
+
+  }
+
+
+}
+
+finder.addAouOneSensor = function(quantity){
+  for(let i=0;i<quantity;i++){
+    let bearing = Math.random() * 2 * Math.PI;
+    let distance = Math.random() * finder.maxRange;
+    let x = distance * Math.sin(bearing);
+    let y = distance * Math.cos(bearing);
+    finder.possibleLocations.push({x:x,y:y});
+  }
+  
+}
+
+finder.addAouTwoSensor = function(quantity){
+  let transmissionLossRange = finder.maxTransmissionLoss - finder.minTransmissionLoss;
+  finder.sensors.sort((a, b) => (a.strength > b.strength) ? -1 : 1)
+  let ratio = finder.sensors[0].strength / finder.sensors[1].strength;
+
+  for(let i=0;i<quantity;i++){
+    let transmissionLoss = finder.minTransmissionLoss + Math.random() * transmissionLossRange;
+    let largeRange = finder.maxRange * Math.random();
+    let smallRange = largeRange / (ratio * transmissionLoss);
+    console.log(largeRange,ratio,transmissionLoss,smallRange);
+
+    let intersections = intersection(finder.sensors[0].x, finder.sensors[0].y, largeRange, finder.sensors[1].x, finder.sensors[1].y, smallRange)
+    if(intersections == false){
+      continue;
+    }
+    else{
+      finder.possibleLocations.push({x:intersections[0],y:intersections[2]});
+      finder.possibleLocations.push({x:intersections[1],y:intersections[3]});
+    }
+    
+  }
+}
+
+finder.addAouTwoSpecificSensors = function(sensor1,sensor2,quantity){
+  let transmissionLossRange = finder.maxTransmissionLoss - finder.minTransmissionLoss;
+  var sensors = [sensor1,sensor2];
+  sensors.sort((a, b) => (a.strength > b.strength) ? -1 : 1)
+  let ratio = sensors[0].strength / sensors[1].strength;
+  var results = [];
+  for(let i=0;i<quantity;i++){
+    let transmissionLoss = finder.minTransmissionLoss + Math.random() * transmissionLossRange;
+    let largeRange = finder.maxRange * Math.random();
+    let smallRange = largeRange / (ratio * transmissionLoss);
+
+    let intersections = intersection(sensors[0].x, sensors[0].y, largeRange, sensors[1].x, sensors[1].y, smallRange)
+    var result = [];
+    if(intersections == false){
+      continue
+    }
+    else{
+      results.push({x:intersections[0],y:intersections[2],tl:transmissionLoss,largeRange:largeRange,largeSensor:sensors[0]});
+      results.push({x:intersections[1],y:intersections[3],tl:transmissionLoss,largeRange:largeRange,largeSensor:sensors[0]});
+    }
+    
+  }
+
+  return results;
+}
+
+finder.addAouThreeSensor = function(quantity){
+  let results = [];
+  let sensor = finder.sensors[2]
+  var tries = 0
+  while(results.length < quantity){
+    tries++;
+    if(tries > 100){
+      break;
+    }
+    let points = finder.addAouTwoSpecificSensors(finder.sensors[0],finder.sensors[1],quantity);
+    console.log(points)
+    for(let i=0;i<points.length;i++){
+      let pt = points[i]
+      let distance = Math.pow(Math.pow(pt.x - sensor.x,2) + Math.pow(pt.y - sensor.y,2),.5)
+      let impliedDistance = pt.largeRange / (pt.largeSensor.strength / sensor.strength);
+      if(Math.abs(distance - impliedDistance) / distance > .05){
+        continue;
+      }
+      else{
+        results.push({x:pt.x,y:pt.y})
+      }
+    }
+  }
+  finder.possibleLocations = finder.possibleLocations.concat(results)
+}
+
+function intersection(x0, y0, r0, x1, y1, r1) {
+        var a, dx, dy, d, h, rx, ry;
+        var x2, y2;
+
+        /* dx and dy are the vertical and horizontal distances between
+         * the circle centers.
+         */
+        dx = x1 - x0;
+        dy = y1 - y0;
+
+        /* Determine the straight-line distance between the centers. */
+        d = Math.sqrt((dy*dy) + (dx*dx));
+
+        /* Check for solvability. */
+        if (d > (r0 + r1)) {
+            /* no solution. circles do not intersect. */
+            return false;
+        }
+        if (d < Math.abs(r0 - r1)) {
+            /* no solution. one circle is contained in the other */
+            return false;
+        }
+
+        /* 'point 2' is the point where the line through the circle
+         * intersection points crosses the line between the circle
+         * centers.  
+         */
+
+        /* Determine the distance from point 0 to point 2. */
+        a = ((r0*r0) - (r1*r1) + (d*d)) / (2.0 * d) ;
+
+        /* Determine the coordinates of point 2. */
+        x2 = x0 + (dx * a/d);
+        y2 = y0 + (dy * a/d);
+
+        /* Determine the distance from point 2 to either of the
+         * intersection points.
+         */
+        h = Math.sqrt((r0*r0) - (a*a));
+
+        /* Now determine the offsets of the intersection points from
+         * point 2.
+         */
+        rx = -dy * (h/d);
+        ry = dx * (h/d);
+
+        /* Determine the absolute intersection points. */
+        var xi = x2 + rx;
+        var xi_prime = x2 - rx;
+        var yi = y2 + ry;
+        var yi_prime = y2 - ry;
+
+        return [xi, xi_prime, yi, yi_prime];
+    }
+
+
+
+
+    finder.addSensor(1,0,0,20)
+finder.addSensor(1,5,10,90)
+finder.addSensor(1,-5,5,40)
+finder.addAouThreeSensor(10000)
+finder.drawPoints()
+finder.drawSensors()
+console.log(finder)
+</script>
+
+
+</html>
