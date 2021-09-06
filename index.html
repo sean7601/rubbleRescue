@@ -1,7 +1,11 @@
 <!DOCTYPE html>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
   <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-  <script src="geomath.js"></script>
+  <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+<script src="geomath.js"></script>
   <script src="leafletHeat.js"></script>
 
   <style>
@@ -10,7 +14,7 @@
     margin: 0;
     }
     html, body, #map {
-        height: 100%;
+        height: 86vh;
         width: 100vw;
     }
   </style>
@@ -19,9 +23,13 @@
   </head>
 <body>
 <div id="map"></div>
+<button type="button" style="height:7vh"  class="btn btn-success btn-lg btn-block mt-0 pt-0 mb-0 pb-0">Record Detection</button>
+<button type="button" style="height:7vh" onclick="finder.addSensorFromButton()" class="btn btn-primary btn-lg btn-block mt-0 pt-0 mb-0 pb-0">Add Sensor</button>
 
 
-<button onclick="getLocation()">Try It</button>
+
+
+
 
 <p id="demo"></p>
 </body>
@@ -46,12 +54,29 @@ map.setView([40.22240964998612, -74.96191965322255],19)
 
 var x = document.getElementById("demo");
 
-function getLocation() {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(showPosition);
-  } else { 
-    x.innerHTML = "Geolocation is not supported by this browser.";
+function getLocationForSensor(id) {
+  var options = {
+  enableHighAccuracy: true,
+  timeout: 5000,
+  maximumAge: 0
+  };
+
+  function success(pos, id) {
+    var crd = pos.coords;
+
+    console.log('Your current position is:');
+    console.log(`Latitude : ${crd.latitude}`);
+    console.log(`Longitude: ${crd.longitude}`);
+    console.log(`More or less ${crd.accuracy} meters.`);
+    finder.addSensor(id,crd.latitude,crd.longitude,1)
+    console.log(crd)
   }
+
+  function error(err) {
+    console.warn(`ERROR(${err.code}): ${err.message}`);
+  }
+
+  navigator.geolocation.getCurrentPosition(success, error, options);
 }
 
 function showPosition(position) {
@@ -80,26 +105,54 @@ finder.sensors = [];
 finder.possibleLocations = [];
 finder.maxRange = 15;//meters
 finder.minTransmissionLoss = 1;
-finder.maxTransmissionLoss = 20;
-finder.referenceLatLng =
+finder.maxTransmissionLoss = 200;
+finder.referenceLatLng = [40.22240964998612, -74.96191965322255]
 finder.getCurrentPosition = [40.22240964998612, -74.96191965322255]
 
 finder.drawSensors = function(){
+  finder.eraseSensors();
   for(let i=0;i<finder.sensors.length;i++){
     let pt = finder.sensors[i];
     let up = geomath.rhumbDestination(finder.referenceLatLng, pt.y/1852, 0)
     let right = geomath.rhumbDestination(up, pt.x/1852, 90)
-    L.circle(right, {radius: finder.maxRange}).addTo(map);
+    finder.sensors[i].drawing = L.circle(right, {radius: finder.maxRange, draggable:true}).addTo(map);
+    finder.sensors[i].innerDrawing = L.circle(right, {radius: .5, color:"black", interactive:false}).addTo(map);
+    finder.sensors[i].drawing.on({
+      mousedown: function () {
+        map.dragging.disable();
+        map.on('mousemove', function(e) {
+          console.log(finder.sensors[i].drawing)
+          finder.sensors[i].drawing.setLatLng(e.latlng);
+          finder.sensors[i].innerDrawing.setLatLng(e.latlng);
+        });
+      },
+      mouseup: function () {
+        map.removeEventListener();
+        map.dragging.enable();
+      }
+    });
   }
 }
+
+finder.eraseSensors = function(){
+  for(let i=0;i<finder.sensors.length;i++){
+    let pt = finder.sensors[i];
+    if(finder.sensors[i].drawing){
+      map.removeLayer(finder.sensors[i].drawing)
+      map.removeLayer(finder.sensors[i].innerDrawing)
+    }
+    finder.sensors[i].drawing = null;
+    finder.sensors[i].innerDrawing = null;
+  }
+
+}
+
 finder.drawPoints = function(){
   let pts = []
   for(let i=0;i<finder.possibleLocations.length;i++){
     let pt = finder.possibleLocations[i];
-    console.log(pt)
     let up = geomath.rhumbDestination(finder.referenceLatLng, pt.y/1852, 0)
     let right = geomath.rhumbDestination(up, pt.x/1852, 90)
-    console.log(right)
     pts.push([right[0],right[1],1])
     //L.circle(right, {radius: 1}).addTo(map);
   }
@@ -107,8 +160,16 @@ finder.drawPoints = function(){
 }
 
 finder.addSensor = function(id,x,y,strength){
+  console.log(x,y)
   let sensor = {id:id,x:x,y:y,strength:strength}
   finder.sensors.push(sensor)
+  finder.drawSensors()
+}
+
+finder.addSensorFromButton = function(){
+  let id = finder.sensors.length + 1;
+  let pos = getLocationForSensor(id);
+
 }
 
 
@@ -145,10 +206,11 @@ finder.addAouTwoSensor = function(quantity){
   let ratio = finder.sensors[0].strength / finder.sensors[1].strength;
 
   for(let i=0;i<quantity;i++){
+    //get a random tempRatio that is plus or minus 10% of ratio
+    let tempRatio = ratio + 2 * (Math.random() - 0.5) * 0.1 * ratio;
     let transmissionLoss = finder.minTransmissionLoss + Math.random() * transmissionLossRange;
     let largeRange = finder.maxRange * Math.random();
     let smallRange = largeRange / (ratio * transmissionLoss);
-    console.log(largeRange,ratio,transmissionLoss,smallRange);
 
     let intersections = intersection(finder.sensors[0].x, finder.sensors[0].y, largeRange, finder.sensors[1].x, finder.sensors[1].y, smallRange)
     if(intersections == false){
@@ -168,10 +230,13 @@ finder.addAouTwoSpecificSensors = function(sensor1,sensor2,quantity){
   sensors.sort((a, b) => (a.strength > b.strength) ? -1 : 1)
   let ratio = sensors[0].strength / sensors[1].strength;
   var results = [];
+  console.log("HI")
   for(let i=0;i<quantity;i++){
+    //get a random tempRatio that is plus or minus 10% of ratio
+    let tempRatio = ratio + 2 * (Math.random() - 0.5) * 0.8 * ratio;
     let transmissionLoss = finder.minTransmissionLoss + Math.random() * transmissionLossRange;
     let largeRange = finder.maxRange * Math.random();
-    let smallRange = largeRange / (ratio * transmissionLoss);
+    let smallRange = largeRange / (tempRatio * transmissionLoss);
 
     let intersections = intersection(sensors[0].x, sensors[0].y, largeRange, sensors[1].x, sensors[1].y, smallRange)
     var result = [];
